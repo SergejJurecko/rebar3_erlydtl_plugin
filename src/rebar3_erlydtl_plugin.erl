@@ -128,6 +128,11 @@ expand_opts(Opts) ->
                  end,
     lists:map(fun(X) -> lists:ukeymerge(1, proplists:unfold(X), SharedOpts) end, OptsLists).
 
+flatten_paths([L|T]) ->
+  L++flatten_paths(T);
+flatten_paths([]) ->
+  [].
+
 do(State) ->
     Apps = case rebar_state:current_app(State) of
                undefined ->
@@ -135,8 +140,8 @@ do(State) ->
                AppInfo ->
                    [AppInfo]
            end,
-    rebar_api:info("Erlydtl main app... ~p", [Apps]),
-    rebar_api:info("Erlydtl project apps ~p", [Apps]),
+    rebar_api:info("Erlydtl main app with ~p", [rebar_state:get(State, project_app_dirs)]),
+    AppDirs = flatten_paths([filelib:wildcard(Pth) || Pth <- rebar_state:get(State, project_app_dirs), Pth /= "."]),
     [begin
          Opts = rebar_app_info:opts(AppInfo),
          Dir = rebar_app_info:dir(AppInfo),
@@ -160,7 +165,23 @@ do(State) ->
                                              compile_dtl(C, S, T, DtlOpts3, Dir, OutDir)
                                      end,
                                      [{check_last_mod, false},
-                                      {recursive, option(recursive, DtlOpts3)}])
+                                      {recursive, option(recursive, DtlOpts3)}]),
+            [begin
+              AppName = filename:basename(AppDir),
+              AppOutDir = filename:join(lists:reverse(tl(tl(lists:reverse(filename:split(OutDir)))))++[AppName,"ebin"]),
+              rebar_base_compiler:run(Opts,
+                                [],
+                                AppDir++"/dtl",
+                                option(source_ext, DtlOpts3),
+                                AppOutDir,
+                                option(module_ext, DtlOpts3) ++ ".beam",
+                                fun(S, T, C) ->
+                                        compile_dtl(C, S, T, DtlOpts3, AppDir++"/dtl", AppOutDir)
+                                end,
+                                [{check_last_mod, false},
+                                 {recursive, option(recursive, DtlOpts3)}])
+              end
+                 || AppDir <- AppDirs, element(1,file:read_file_info(AppDir++"/dtl")) == ok]
           end, expand_opts(DtlOpts1))
      end || AppInfo <- Apps],
 
@@ -206,7 +227,7 @@ do_compile(Source, Target, DtlOpts, Dir, OutDir) ->
     %% ensure that doc_root and out_dir are defined,
     %% using defaults if necessary
     Opts = lists:ukeymerge(1, DtlOpts, Sorted),
-    rebar_api:debug("Compiling \"~s\" -> \"~s\" with options:~n    ~s",
+    rebar_api:info("Compiling \"~s\" -> \"~s\" with options:~n    ~s",
                     [Source, Target, io_lib:format("~p", [Opts])]),
     case erlydtl:compile_file(ec_cnv:to_list(Source),
                               list_to_atom(module_name(Target)),
