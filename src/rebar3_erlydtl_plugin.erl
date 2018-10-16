@@ -134,58 +134,62 @@ flatten_paths([]) ->
   [].
 
 do(State) ->
-    Apps = case rebar_state:current_app(State) of
-               undefined ->
-                   rebar_state:project_apps(State);
-               AppInfo ->
-                   [AppInfo]
-           end,
-    rebar_api:info("Erlydtl main app with ~p", [rebar_state:get(State, project_app_dirs)]),
-    AppDirs = flatten_paths([filelib:wildcard(Pth) || Pth <- rebar_state:get(State, project_app_dirs), Pth /= "."]),
-    [begin
-         Opts = rebar_app_info:opts(AppInfo),
-         Dir = rebar_app_info:dir(AppInfo),
-         OutDir = rebar_app_info:ebin_dir(AppInfo),
+  case (catch rebar_state:get(State, project_app_dirs)) of
+    PAD when is_list(PAD) ->
+      Apps = case rebar_state:current_app(State) of
+                 undefined ->
+                     rebar_state:project_apps(State);
+                 AppInfo ->
+                     [AppInfo]
+             end,
+      rebar_api:info("Erlydtl main app with ~p", [rebar_state:get(State, project_app_dirs)]),
+      AppDirs = flatten_paths([filelib:wildcard(Pth) || Pth <- rebar_state:get(State, project_app_dirs), Pth /= "."]),
+      [begin
+           Opts = rebar_app_info:opts(AppInfo),
+           Dir = rebar_app_info:dir(AppInfo),
+           OutDir = rebar_app_info:ebin_dir(AppInfo),
 
-         DtlOpts1 = proplists:unfold(rebar_opts:get(Opts, erlydtl_opts, [])),
-         lists:foreach(fun(DtlOpts) ->
-             TemplateDir = filename:join(Dir, option(doc_root, DtlOpts)),
-             DtlOpts2 = [{doc_root, TemplateDir} | proplists:delete(doc_root, DtlOpts)],
-             TagDir = filename:join(Dir, option(custom_tags_dir, DtlOpts2)),
-             DtlOpts3 = [{custom_tags_dir, TagDir} | proplists:delete(custom_tags_dir, DtlOpts2)],
-             filelib:ensure_dir(filename:join(OutDir, "dummy.beam")),
+           DtlOpts1 = proplists:unfold(rebar_opts:get(Opts, erlydtl_opts, [])),
+           lists:foreach(fun(DtlOpts) ->
+               TemplateDir = filename:join(Dir, option(doc_root, DtlOpts)),
+               DtlOpts2 = [{doc_root, TemplateDir} | proplists:delete(doc_root, DtlOpts)],
+               TagDir = filename:join(Dir, option(custom_tags_dir, DtlOpts2)),
+               DtlOpts3 = [{custom_tags_dir, TagDir} | proplists:delete(custom_tags_dir, DtlOpts2)],
+               filelib:ensure_dir(filename:join(OutDir, "dummy.beam")),
 
-             rebar_base_compiler:run(Opts,
-                                     [],
-                                     TemplateDir,
-                                     option(source_ext, DtlOpts3),
-                                     OutDir,
-                                     option(module_ext, DtlOpts3) ++ ".beam",
-                                     fun(S, T, C) ->
-                                             compile_dtl(C, S, T, DtlOpts3, Dir, OutDir)
-                                     end,
-                                     [{check_last_mod, false},
-                                      {recursive, option(recursive, DtlOpts3)}]),
-            [begin
-              AppName = filename:basename(AppDir),
-              AppOutDir = filename:join(lists:reverse(tl(tl(lists:reverse(filename:split(OutDir)))))++[AppName,"ebin"]),
-              rebar_base_compiler:run(Opts,
-                                [],
-                                AppDir++"/dtl",
-                                option(source_ext, DtlOpts3),
-                                AppOutDir,
-                                option(module_ext, DtlOpts3) ++ ".beam",
-                                fun(S, T, C) ->
-                                        compile_dtl(C, S, T, DtlOpts3, AppDir++"/dtl", AppOutDir)
-                                end,
-                                [{check_last_mod, false},
-                                 {recursive, option(recursive, DtlOpts3)}])
-              end
-                 || AppDir <- AppDirs, element(1,file:read_file_info(AppDir++"/dtl")) == ok]
-          end, expand_opts(DtlOpts1))
-     end || AppInfo <- Apps],
-
-    {ok, State}.
+               rebar_base_compiler:run(Opts,
+                                       [],
+                                       TemplateDir,
+                                       option(source_ext, DtlOpts3),
+                                       OutDir,
+                                       option(module_ext, DtlOpts3) ++ ".beam",
+                                       fun(S, T, C) ->
+                                               compile_dtl(C, S, T, DtlOpts3, Dir, OutDir)
+                                       end,
+                                       [{check_last_mod, false},
+                                        {recursive, option(recursive, DtlOpts3)}]),
+              [begin
+                AppName = filename:basename(AppDir),
+                AppOutDir = filename:join(lists:reverse(tl(tl(lists:reverse(filename:split(OutDir)))))++[AppName,"ebin"]),
+                rebar_base_compiler:run(Opts,
+                                  [],
+                                  AppDir++"/dtl",
+                                  option(source_ext, DtlOpts3),
+                                  AppOutDir,
+                                  option(module_ext, DtlOpts3) ++ ".beam",
+                                  fun(S, T, C) ->
+                                          compile_dtl(C, S, T, DtlOpts3, AppDir++"/dtl", AppOutDir)
+                                  end,
+                                  [{check_last_mod, false},
+                                   {recursive, option(recursive, DtlOpts3)}])
+                end
+                   || AppDir <- AppDirs, element(1,file:read_file_info(AppDir++"/dtl")) == ok]
+            end, expand_opts(DtlOpts1))
+       end || AppInfo <- Apps];
+    _ ->
+      ok
+  end,
+  {ok, State}.
 
 -spec format_error(any()) ->  iolist().
 format_error(Reason) ->
