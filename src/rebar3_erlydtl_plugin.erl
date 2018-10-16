@@ -135,7 +135,8 @@ do(State) ->
                AppInfo ->
                    [AppInfo]
            end,
-    rebar_api:info("Running erlydtl... ~p", [Apps]),
+    rebar_api:info("Erlydtl main app... ~p", [Apps]),
+    rebar_api:info("Erlydtl project apps ~p", [Apps]),
     [begin
          Opts = rebar_app_info:opts(AppInfo),
          Dir = rebar_app_info:dir(AppInfo),
