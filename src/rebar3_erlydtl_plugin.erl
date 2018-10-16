@@ -129,13 +129,13 @@ expand_opts(Opts) ->
     lists:map(fun(X) -> lists:ukeymerge(1, proplists:unfold(X), SharedOpts) end, OptsLists).
 
 do(State) ->
-    rebar_api:info("Running erlydtl...", []),
     Apps = case rebar_state:current_app(State) of
                undefined ->
                    rebar_state:project_apps(State);
                AppInfo ->
                    [AppInfo]
            end,
+    rebar_api:info("Running erlydtl... ~p", [Apps]),
     [begin
          Opts = rebar_app_info:opts(AppInfo),
          Dir = rebar_app_info:dir(AppInfo),
